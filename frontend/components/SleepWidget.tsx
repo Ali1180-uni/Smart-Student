@@ -1,4 +1,9 @@
+"use client";
+
 import { Moon, ShieldAlert } from "lucide-react";
+import { useEffect, useState } from "react";
+import { api } from "../lib/api";
+import type { SleepEstimate, SleepStatus } from "../lib/types";
 
 type SleepWidgetProps = {
   hoursToWakeTime?: number;
@@ -9,8 +14,30 @@ export default function SleepWidget({
   hoursToWakeTime = 14,
   estimatedWorkloadHours = 8,
 }: SleepWidgetProps) {
-  const estimatedSleep = hoursToWakeTime - estimatedWorkloadHours;
-  const sleepStatus = estimatedSleep >= 8 ? "healthy" : estimatedSleep >= 6 ? "watch" : "alert";
+  const [estimate, setEstimate] = useState<SleepEstimate | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .estimateSleep({
+        hours_to_wake_time: hoursToWakeTime,
+        estimated_workload_hours: estimatedWorkloadHours,
+      })
+      .then((result) => {
+        if (!cancelled) setEstimate(result);
+      })
+      .catch(() => {
+        // Keep the local estimate if the backend is unreachable.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hoursToWakeTime, estimatedWorkloadHours]);
+
+  const estimatedSleep =
+    estimate?.estimated_sleep ?? hoursToWakeTime - estimatedWorkloadHours;
+  const sleepStatus: SleepStatus =
+    estimate?.status ?? (estimatedSleep >= 8 ? "healthy" : estimatedSleep >= 6 ? "watch" : "alert");
   const statusStyles = {
     healthy: {
       label: "Sleep target on track",
@@ -34,11 +61,19 @@ export default function SleepWidget({
   const sleepProgress = Math.min(Math.max((estimatedSleep / 8) * 100, 0), 100);
 
   return (
-    <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm sm:p-7" aria-labelledby="sleep-widget-title">
+    <section
+      className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm sm:p-7"
+      aria-labelledby="sleep-widget-title"
+    >
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold tracking-[0.16em] text-zinc-500 uppercase">Smart sleep engine</p>
-          <h2 id="sleep-widget-title" className="mt-2 text-lg font-semibold tracking-tight text-zinc-900">
+          <p className="text-xs font-semibold tracking-[0.16em] text-zinc-500 uppercase">
+            Smart sleep engine
+          </p>
+          <h2
+            id="sleep-widget-title"
+            className="mt-2 text-lg font-semibold tracking-tight text-zinc-900"
+          >
             Tonight&apos;s outlook
           </h2>
         </div>
@@ -48,7 +83,9 @@ export default function SleepWidget({
       </div>
 
       <div className="mt-6 flex items-end gap-2">
-        <span className="text-5xl font-semibold tracking-tight text-zinc-900">{estimatedSleep}</span>
+        <span className="text-5xl font-semibold tracking-tight text-zinc-900">
+          {estimatedSleep}
+        </span>
         <span className="mb-1 text-sm font-medium text-zinc-500">hours estimated sleep</span>
       </div>
       <p className={`mt-2 text-sm font-medium ${statusStyles.text}`}>{statusStyles.label}</p>
